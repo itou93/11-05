@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>越総 ARアプリ</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@master/aframe/build/aframe-ar.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.1/dist/aframe-extras.min.js"></script>
+
+    <script>
+        AFRAME.registerComponent('high-quality-texture', {
+            init: function () {
+                this.el.addEventListener('model-loaded', (e) => {
+                    const mesh = this.el.getObject3D('mesh');
+                    if (mesh) {
+                        mesh.traverse((node) => {
+                            if (node.isMesh && node.material && node.material.map) {
+                                node.material.map.generateMipmaps = false;
+                                node.material.map.minFilter = THREE.LinearFilter;
+                                node.material.map.magFilter = THREE.LinearFilter;
+                                node.material.map.needsUpdate = true;
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    </script>
+    
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: transparent !important;
+        }
+
+        .a-canvas {
+            z-index: 1 !important;
+        }
+        a-scene {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            width: 100vw !important; height: 100vh !important;
+            z-index: 1 !important;
+        }
+
+        .btn-back-overlay {
+            position: fixed; top: 20px; left: 20px; z-index: 10000;
+            background-color: rgba(0, 0, 0, 0.6); color: #ffffff;
+            padding: 10px 18px; border-radius: 20px; text-decoration: none;
+            font-weight: bold; font-size: 16px; border: 2px solid #ffffff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .btn-collection-overlay {
+            position: fixed; top: 20px; right: 20px; z-index: 10000;
+            background-color: #f59e0b; color: #ffffff;
+            padding: 10px 18px; border-radius: 20px; border: 2px solid #ffffff;
+            font-weight: bold; font-size: 16px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
+        #soft-log-panel {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 88%; max-width: 360px;
+            background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px);
+            color: #333333; padding: 14px 18px; border-radius: 20px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15); z-index: 10000;
+            border: 1px solid rgba(255, 255, 255, 0.6); text-align: center;
+        }
+        .log-header {
+            display: flex; justify-content: space-between; align-items: center;
+            font-weight: bold; font-size: 15px; margin-bottom: 6px;
+        }
+        .log-status-badge {
+            font-size: 12px; padding: 3px 10px; border-radius: 12px;
+            background: #e2e8f0; color: #475569; font-weight: bold;
+        }
+        .log-message { font-size: 13px; color: #64748b; line-height: 1.4; margin: 0; }
+
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.5);
+            z-index: 20000; justify-content: center; align-items: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: #ffffff; width: 85%; max-width: 380px; padding: 24px;
+            border-radius: 20px; text-align: center; max-height: 75vh;
+            overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .modal-content h2 {
+            margin-top: 0; font-size: 18px; color: #222;
+            border-bottom: 2px dashed #ddd; padding-bottom: 10px; cursor: pointer;
+        }
+
+        .dept-button-group {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0;
+        }
+        .dept-btn {
+            background: #f1f5f9; border: 2px solid #cbd5e1; border-radius: 12px;
+            padding: 12px 8px; font-weight: bold; font-size: 13px; color: #334155;
+            cursor: pointer;
+        }
+
+        .video-item {
+            background: #f8fafc; padding: 12px; margin: 12px 0;
+            border-radius: 12px; border: 2px solid #e2e8f0; text-align: left;
+        }
+
+        .modal-footer { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
+        .modal-btn {
+            border: none; padding: 10px 18px; border-radius: 16px;
+            font-weight: bold; font-size: 13px; cursor: pointer;
+        }
+        .modal-btn.back-btn { background: #475569; color: white; }
+        .modal-btn.close-btn { background: #ef4444; color: white; }
+
+        #explanation-screen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+            display: flex; justify-content: center; align-items: center; z-index: 5000;
+        }
+        .bg-decorations { position: absolute; width: 100%; height: 100%; pointer-events: none; }
+        .decor-item { position: absolute; color: rgba(255, 255, 255, 0.55); animation: float 6s ease-in-out infinite alternate; }
+        .item-1 { top: 10%; left: 10%; font-size: 50px; }
+        .item-2 { bottom: 15%; right: 12%; font-size: 45px; animation-delay: 2s; }
+        .item-3 { top: 15%; right: 10%; font-size: 48px; animation-delay: 1s; }
+        .item-4 { bottom: 20%; left: 8%; font-size: 40px; animation-delay: 3s; }
+        .item-5 { top: 50%; left: 5%; font-size: 48px; animation-delay: 1.5s; }
+        .item-6 { top: 52%; right: 6%; font-size: 50px; animation-delay: 2.5s; }
+
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            100% { transform: translateY(-20px) rotate(12deg); }
+        }
+
+        .card {
+            background: #fdfbf7; width: 88%; max-width: 380px; padding: 30px 24px;
+            border: 2px solid #333; outline: 5px solid #fdfbf7;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.25); text-align: center; border-radius: 20px;
+        }
+        .card h1 { font-size: 22px; color: #222; margin-top: 0; border-bottom: 2px dashed #ccc; padding-bottom: 10px; }
+        .card p { font-size: 14px; color: #444; line-height: 1.8; margin-bottom: 20px; }
+        .start-btn {
+            background: linear-gradient(135deg, #10b981, #059669); color: #fff;
+            border: none; padding: 12px 36px; font-size: 16px; font-weight: bold;
+            border-radius: 30px; cursor: pointer; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+
+    <button type="button" class="btn-back-overlay" onclick="goBack()">← 戻る</button>
+    <button type="button" class="btn-collection-overlay" onclick="openCollection()">🎬 学科動画</button>
+
+    <a-scene embedded vr-mode-ui="enabled: false;" arjs="sourceType: webcam; debugUIEnabled: false; patternRatio: 0.7;">
+        
+        <a-entity light="type: ambient; color: #ffffff; intensity: 1.8;"></a-entity>
+        <a-entity light="type: directional; color: #ffffff; intensity: 1.2;" position="1 4 2"></a-entity>
+
+        <a-assets>
+            <!-- 動画ソースを denki.mp4 に変更 -->
+            <video id="schoolShortVideo" src="denki.mp4" loop playsinline webkit-playsinline preload="auto" crossorigin="anonymous"></video>
+        </a-assets>
+
+        <a-marker type="pattern" url="./pattern-koshou.patt" patternRatio="0.7" id="ar-marker-1">
+            <a-video src="#schoolShortVideo" position="0 0.1 0" rotation="-90 0 0" width="3.2" height="1.8"></a-video>
+            <a-entity gltf-model="kougyo2.glb" high-quality-texture position="-1 0.5 -0.3" rotation="-90 0 0" scale="0.1 0.1 0.1" animation-mixer="clip: *; loop: pingpong" animation="loop: true"></a-entity>
+        </a-marker>
+
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <div id="soft-log-panel">
+        <div class="log-header">
+            <span>📷 マーカー読み取り</span>
+            <span id="log-status" class="log-status-badge">スキャン中</span>
+        </div>
+        <div id="log-message" class="log-message">校章マーカーにかざすと動画が始まるよ！</div>
+    </div>
+
+    <div id="collection-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 onclick="handleTitleClick()">学科を選択してください</h2>
+            <div class="dept-button-group">
+                <button class="dept-btn" onclick="selectDepartment('stamp-a')">電子機械科</button>
+                <button class="dept-btn" onclick="selectDepartment('stamp-b')">情報技術科</button>
+                <button class="dept-btn" onclick="selectDepartment('stamp-c')">情報処理科</button>
+                <button class="dept-btn" onclick="selectDepartment('stamp-d')">服飾デザイン科</button>
+                <button class="dept-btn" onclick="selectDepartment('stamp-e')">食物調理科</button>
+                <button class="dept-btn" onclick="selectDepartment('stamp-f')">流通経済科</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn close-btn" onclick="closeCollection()">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dept-video-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="dept-title">学科動画一覧</h2>
+            <div id="dept-video-list"></div>
+            <div class="modal-footer">
+                <button class="modal-btn back-btn" onclick="closeDeptVideos()">← 学科一覧へ戻る</button>
+                <button class="modal-btn close-btn" onclick="closeDeptVideos()">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="explanation-screen">
+        <div class="bg-decorations">
+            <i class="fa-solid fa-gear decor-item item-1"></i>
+            <i class="fa-solid fa-calculator decor-item item-2"></i>
+            <i class="fa-solid fa-scissors decor-item item-3"></i>
+            <i class="fa-solid fa-utensils decor-item item-4"></i>
+            <i class="fa-solid fa-vr-cardboard decor-item item-5"></i>
+            <i class="fa-solid fa-graduation-cap decor-item item-6"></i>
+        </div>
+        <div class="card">
+            <h1>— 越総 AR体験 —</h1>
+            <p>カメラを校章マーカーに<br>かざしてみよう！<br>キャラクターと学科紹介動画が<br>飛び出すよ</p>
+            <div>
+                <button type="button" class="start-btn" onclick="startAR()">Next ➔</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const deptNames = {
+            'stamp-a': '電子機械科',
+            'stamp-b': '情報技術科',
+            'stamp-c': '情報処理科',
+            'stamp-d': '服飾デザイン科',
+            'stamp-e': '食物調理科',
+            'stamp-f': '流通経済科'
+        };
+
+        let clickCount = 0;
+        let clickTimer = null;
+
+        function startAR() {
+            const screen = document.getElementById('explanation-screen');
+            if (screen) {
+                screen.style.setProperty('display', 'none', 'important');
+            }
+        }
+
+        function goBack() {
+            stopWebcamStream();
+            window.location.href = 'index.html';
+        }
+
+        function stopWebcamStream() {
+            try {
+                const videoElems = document.querySelectorAll('video');
+                videoElems.forEach(video => {
+                    if (video.srcObject) {
+                        const stream = video.srcObject;
+                        stream.getTracks().forEach(track => track.stop());
+                        video.srcObject = null;
+                    }
+                });
+            } catch (e) {
+                console.warn("カメラ停止処理エラー:", e);
+            }
+        }
+
+        function updateSoftLog(status, message, isSuccess = true) {
+            const statusEl = document.getElementById('log-status');
+            const msgEl = document.getElementById('log-message');
+
+            if (statusEl && msgEl) {
+                statusEl.textContent = status;
+                if (isSuccess) {
+                    statusEl.style.background = '#d1fae5';
+                    statusEl.style.color = '#047857';
+                } else {
+                    statusEl.style.background = '#e2e8f0';
+                    statusEl.style.color = '#475569';
+                }
+                msgEl.textContent = message;
+            }
+        }
+
+        function openCollection() {
+            const modal = document.getElementById('collection-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeCollection() {
+            const modal = document.getElementById('collection-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function selectDepartment(deptKey) {
+            openDeptVideos(deptKey);
+        }
+
+        function openDeptVideos(deptKey) {
+            const deptModal = document.getElementById('dept-video-modal');
+            const collectionModal = document.getElementById('collection-modal');
+            const title = document.getElementById('dept-title');
+            const list = document.getElementById('dept-video-list');
+
+            if (title) title.textContent = `${deptNames[deptKey] || '学科'} の動画`;
+
+            if (list) {
+                list.innerHTML = '';
+
+                const deptVideoData = {
+                    'stamp-a': { title: '電子機械科 紹介動画', src: 'denki.mp4' },
+                    'stamp-b': { title: '情報技術科 紹介動画', src: 'denki.mp4' },
+                    'stamp-c': { title: '情報処理科 紹介動画', src: 'syougyou.mp4' },
+                    'stamp-d': { title: '服飾デザイン科 紹介動画', src: 'hukude.mp4' },
+                    'stamp-e': { title: '食物調理科 紹介動画', src: 'syokutyou.mp4' },
+                    'stamp-f': { title: '流通経済科 紹介動画', src: 'syougyou.mp4' }
+                };
+
+                const videoInfo = deptVideoData[deptKey];
+
+                if (videoInfo) {
+                    const div = document.createElement('div');
+                    div.className = 'video-item unlocked';
+                    div.innerHTML = `
+                        <p style="font-weight:bold; margin:0 0 8px 0; color:#059669;">🎬 ${videoInfo.title}</p>
+                        <video src="${videoInfo.src}" controls style="width:100%; border-radius:8px; display:block;"></video>
+                    `;
+                    list.appendChild(div);
+                }
+            }
+
+            if (collectionModal) collectionModal.style.display = 'none';
+            if (deptModal) deptModal.style.display = 'flex';
+        }
+
+        function closeDeptVideos() {
+            const deptModal = document.getElementById('dept-video-modal');
+            const collectionModal = document.getElementById('collection-modal');
+
+            if (deptModal) {
+                deptModal.querySelectorAll('video').forEach(v => v.pause());
+                deptModal.style.display = 'none';
+            }
+            if (collectionModal) collectionModal.style.display = 'flex';
+        }
+
+        function handleTitleClick() {
+            clickCount++;
+            clearTimeout(clickTimer);
+
+            if (clickCount >= 5) {
+                clickCount = 0;
+                if (confirm('【開発者コマンド】再読み込みしますか？')) {
+                    location.reload();
+                }
+            } else {
+                clickTimer = setTimeout(() => { clickCount = 0; }, 1500);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const marker = document.getElementById('ar-marker-1');
+
+            if (marker) {
+                marker.addEventListener('markerFound', function() {
+                    console.log("検出成功: 校章マーカー");
+                    updateSoftLog('検出成功！', '🎉 校章マーカーを認識中！動画が再生されます', true);
+
+                    const videoAttr = this.querySelector('a-video');
+                    const video = videoAttr ? document.querySelector(videoAttr.getAttribute('src')) : null;
+
+                    if (video) {
+                        video.currentTime = 0;
+                        video.muted = false;
+                        video.play().catch(e => console.log('動画再生エラー:', e));
+                    }
+                });
+
+                marker.addEventListener('markerLost', function() {
+                    console.log("マーカー喪失: 校章マーカー");
+                    updateSoftLog('スキャン中', '校章マーカーにかざすと動画が始まるよ！', false);
+
+                    const videoAttr = this.querySelector('a-video');
+                    const video = videoAttr ? document.querySelector(videoAttr.getAttribute('src')) : null;
+                    if (video) video.pause();
+                });
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopWebcamStream();
+        });
+    </script>
+</body>
+</html>
